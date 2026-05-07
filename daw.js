@@ -20,9 +20,9 @@ let pianoNotes = {};
 let awaitingMute = false;
 let selectedTrack = 0;
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // INITIALIZATION
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 async function init() {
   await fetchState();
@@ -32,9 +32,9 @@ async function init() {
   startStatusPolling();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // API CALLS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 async function fetchState() {
   try {
@@ -63,12 +63,13 @@ async function apiCall(endpoint, method = 'POST', data = {}) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // CHANNEL RACK RENDERING
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 function renderChannelRack() {
   const rack = document.getElementById('channel-rack');
+  if (!rack) return; // Add check in case we're not on the rack tab
   rack.innerHTML = '';
 
   state.tracks.forEach((track, index) => {
@@ -105,24 +106,24 @@ function renderChannelRack() {
     name.onclick = () => {
       selectedTrack = index;
       renderPianoRoll();
+      switchTab('piano-roll-tab'); // Automatically switch to piano roll
     };
 
-    // Step buttons (8 visible steps showing pattern)
+    // Step buttons (16 visible steps showing pattern)
     const stepsDiv = document.createElement('div');
     stepsDiv.className = 'channel-steps';
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 16; i++) {
       const stepBtn = document.createElement('button');
       stepBtn.className = 'step-btn';
-      const stepIndex = i * 16;
-      if (track.pattern && track.pattern[stepIndex]) {
+      if (track.pattern && track.pattern[i]) {
         stepBtn.classList.add('active');
       }
-      if (stepIndex === state.currentStep) {
+      if (i === state.currentStep % 16) {
         stepBtn.classList.add('current');
       }
       stepBtn.textContent = (i + 1);
-      stepBtn.onclick = () => toggleStep(index, stepIndex);
+      stepBtn.onclick = () => toggleStep(index, i);
       stepsDiv.appendChild(stepBtn);
     }
 
@@ -133,9 +134,9 @@ function renderChannelRack() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // PIANO ROLL RENDERING
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 function renderPianoRoll() {
   renderPianoKeys();
@@ -144,6 +145,7 @@ function renderPianoRoll() {
 
 function renderPianoKeys() {
   const keysContainer = document.getElementById('piano-keys');
+  if (!keysContainer) return;
   keysContainer.innerHTML = '';
 
   const reverseNotes = [...NOTE_NAMES].reverse();
@@ -164,6 +166,7 @@ function renderPianoKeys() {
 
 function renderPianoGrid() {
   const grid = document.getElementById('piano-roll-grid');
+  if (!grid) return;
   grid.innerHTML = '';
 
   const reverseNotes = [...NOTE_NAMES].reverse();
@@ -196,9 +199,9 @@ function renderPianoGrid() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // EVENT HANDLERS
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 function attachEventListeners() {
   document.getElementById('play-btn').onclick = () => apiCall('/play', 'POST');
@@ -224,6 +227,9 @@ function attachEventListeners() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
+    // Ignore key shortcuts when typing in inputs
+    if (e.target.tagName === 'INPUT') return;
+
     if (e.code === 'Space') {
       e.preventDefault();
       if (state.playing) {
@@ -263,14 +269,16 @@ function switchTab(tabName) {
   });
 
   // Show selected tab
-  document.getElementById(tabName).classList.add('active');
+  const selectedTab = document.getElementById(tabName);
+  if (selectedTab) selectedTab.classList.add('active');
 
   // Activate button
-  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+  const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
+  if (selectedBtn) selectedBtn.classList.add('active');
 }
 
 async function toggleStep(trackIndex, step) {
-  await apiCall(`/track/${trackIndex}/step/${step}`, 'POST');
+  await apiCall(`/track/${trackIndex}/toggle-step/${step}`, 'POST');
   renderChannelRack();
 }
 
@@ -284,33 +292,43 @@ function togglePianoNote(cell, key) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // POLLING & UPDATES
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 function startStatusPolling() {
   setInterval(async () => {
+    const oldStep = state.currentStep;
     await fetchState();
-    updateStepDisplay();
-    updateCurrentStepDisplay();
-  }, 100);
+    
+    // Only update UI if playing or step changed
+    if (state.playing || oldStep !== state.currentStep) {
+      updateStepDisplay();
+      updateCurrentStepDisplay();
+    }
+  }, 50); // Faster polling for snappier UI
 }
 
 function updateStepDisplay() {
   const info = document.getElementById('step-info');
+  if (!info) return;
   const bar = Math.floor(state.currentStep / 16) + 1;
-  const beat = (state.currentStep % 16) + 1;
-  info.textContent = `Bar: ${bar} | Beat: ${beat}`;
+  const beat = Math.floor((state.currentStep % 16) / 4) + 1;
+  const step = (state.currentStep % 4) + 1;
+  info.textContent = `Bar: ${bar} | Beat: ${beat} | Step: ${step}`;
 }
 
 function updateCurrentStepDisplay() {
   // Update channel rack
-  document.querySelectorAll('.step-btn').forEach((btn, idx) => {
-    btn.classList.remove('current');
-    const stepIndex = idx * 16;
-    if (state.currentStep >= stepIndex && state.currentStep < stepIndex + 16) {
-      btn.classList.add('current');
-    }
+  document.querySelectorAll('.channel').forEach((channel, trackIdx) => {
+      const stepBtns = channel.querySelectorAll('.step-btn');
+      stepBtns.forEach((btn, stepIdx) => {
+          btn.classList.remove('current');
+          // In the UI we show 16 steps, which corresponds to modulo 16 of current step
+          if (stepIdx === state.currentStep % 16) {
+              btn.classList.add('current');
+          }
+      });
   });
 
   // Update piano roll
@@ -322,8 +340,8 @@ function updateCurrentStepDisplay() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 // START
-// ═══════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════[...]
 
 init();
