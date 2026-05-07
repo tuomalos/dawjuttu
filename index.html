@@ -16,14 +16,6 @@
                     <label>BPM:</label>
                     <input type="number" id="bpm-input" value="120" min="40" max="300">
                 </div>
-                <div class="control-group">
-                    <label>Scale:</label>
-                    <select id="scale-select">
-                        <option value="8">8 Steps</option>
-                        <option value="16" selected>16 Steps</option>
-                        <option value="32">32 Steps</option>
-                    </select>
-                </div>
             </div>
         </div>
 
@@ -35,16 +27,37 @@
             <div class="step-display" id="step-info">Step: 1</div>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Channel Rack (Left) -->
-            <div class="channel-rack" id="channel-rack">
-                <!-- Populated by JS -->
-            </div>
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="channel-rack-tab">Channel Rack</button>
+            <button class="tab-btn" data-tab="piano-roll-tab">Piano Roll</button>
+        </div>
 
-            <!-- Sequencer Grid (Right) -->
-            <div class="grid-wrapper">
-                <div class="sequencer-grid" id="sequencer-grid">
+        <!-- Channel Rack Tab -->
+        <div id="channel-rack-tab" class="tab-content active">
+            <div class="channel-rack-container">
+                <div class="channel-rack-header">
+                    <div class="rack-menu">
+                        <button class="rack-btn">▶</button>
+                        <button class="rack-btn">All</button>
+                        <button class="rack-btn">⋮</button>
+                    </div>
+                </div>
+                <div class="channel-rack-scroll">
+                    <div class="channel-rack" id="channel-rack">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Piano Roll Tab -->
+        <div id="piano-roll-tab" class="tab-content">
+            <div class="piano-roll-container">
+                <div class="piano-keys" id="piano-keys">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="piano-roll-grid" id="piano-roll-grid">
                     <!-- Populated by JS -->
                 </div>
             </div>
@@ -65,6 +78,7 @@
                 <span><strong>S:</strong> Stop</span>
                 <span><strong>M + 1-4:</strong> Mute track</span>
                 <span><strong>Click steps:</strong> Toggle notes</span>
+                <span><strong>Click piano:</strong> Add notes</span>
             </div>
         </div>
     </div>
