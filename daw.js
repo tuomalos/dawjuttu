@@ -1,15 +1,22 @@
 // DAW Frontend Controller
 const API_BASE = 'http://localhost:5000/api';
 
+// Note frequencies for piano roll
+const NOTE_NAMES = ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4',
+                    'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5', 'A#5', 'B5',
+                    'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6'];
+
 let state = {
   tracks: [],
   playing: false,
   currentStep: 0,
   bpm: 120,
-  steps: 16,
+  steps: 128, // 8 bars of 16 steps
 };
 
+let pianoNotes = {};
 let awaitingMute = false;
+let selectedTrack = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INITIALIZATION
@@ -18,7 +25,7 @@ let awaitingMute = false;
 async function init() {
   await fetchState();
   renderChannelRack();
-  renderGrid();
+  renderPianoRoll();
   attachEventListeners();
   startStatusPolling();
 }
@@ -55,7 +62,7 @@ async function apiCall(endpoint, method = 'POST', data = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RENDER FUNCTIONS
+/* CHANNEL RACK RENDERING */
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderChannelRack() {
@@ -66,89 +73,126 @@ function renderChannelRack() {
     const channel = document.createElement('div');
     channel.className = 'channel';
 
+    // Left controls (indicator, mute, solo)
+    const leftControls = document.createElement('div');
+    leftControls.className = 'channel-controls-left';
+
+    const indicator = document.createElement('div');
+    indicator.className = 'channel-indicator';
+    if (track.muted) {
+      indicator.classList.add('off');
+    }
+    indicator.onclick = () => apiCall(`/track/${index}/mute`, 'POST');
+    leftControls.appendChild(indicator);
+
+    const muteBtn = document.createElement('button');
+    muteBtn.className = 'channel-icon-btn';
+    muteBtn.textContent = '🔇';
+    muteBtn.title = 'Mute';
+    muteBtn.onclick = () => apiCall(`/track/${index}/mute`, 'POST');
+    leftControls.appendChild(muteBtn);
+
+    const soloBtn = document.createElement('button');
+    soloBtn.className = 'channel-icon-btn';
+    soloBtn.textContent = 'S';
+    soloBtn.title = 'Solo';
+    leftControls.appendChild(soloBtn);
+
+    // Track name
     const name = document.createElement('div');
     name.className = 'channel-name';
     name.textContent = track.name;
-
-    const controls = document.createElement('div');
-    controls.className = 'channel-controls';
-
-    // Mute button
-    const muteBtn = document.createElement('button');
-    muteBtn.className = `mute-btn ${track.muted ? 'muted' : ''}`;
-    muteBtn.textContent = track.muted ? '🔇 Muted' : '🔊 Mute';
-    muteBtn.onclick = (e) => {
-      e.stopPropagation();
-      apiCall(`/track/${index}/mute`, 'POST');
+    name.onclick = () => {
+      selectedTrack = index;
+      renderPianoRoll();
     };
 
-    // Volume slider
-    const volumeLabel = document.createElement('div');
-    volumeLabel.className = 'volume-label';
-    volumeLabel.textContent = `Vol: ${Math.round(track.volume * 100)}%`;
+    // Step buttons (8 visible steps showing pattern)
+    const stepsDiv = document.createElement('div');
+    stepsDiv.className = 'channel-steps';
 
-    const volumeSlider = document.createElement('input');
-    volumeSlider.type = 'range';
-    volumeSlider.className = 'volume-slider';
-    volumeSlider.min = '0';
-    volumeSlider.max = '100';
-    volumeSlider.value = track.volume * 100;
-    volumeSlider.oninput = (e) => {
-      volumeLabel.textContent = `Vol: ${e.target.value}%`;
-      apiCall(`/track/${index}/volume`, 'POST', { volume: e.target.value / 100 });
-    };
+    for (let i = 0; i < 32; i += 4) {
+      const stepBtn = document.createElement('button');
+      stepBtn.className = 'step-btn';
+      if (track.pattern[i]) {
+        stepBtn.classList.add('active');
+      }
+      if (i === state.currentStep) {
+        stepBtn.classList.add('current');
+      }
+      stepBtn.textContent = String.fromCharCode(9632); // filled square
+      stepBtn.onclick = () => toggleStep(index, i);
+      stepsDiv.appendChild(stepBtn);
+    }
 
-    controls.appendChild(muteBtn);
-    controls.appendChild(volumeLabel);
-    controls.appendChild(volumeSlider);
-
+    channel.appendChild(leftControls);
     channel.appendChild(name);
-    channel.appendChild(controls);
+    channel.appendChild(stepsDiv);
     rack.appendChild(channel);
   });
 }
 
-function renderGrid() {
-  const grid = document.getElementById('sequencer-grid');
+// ═══════════════════════════════════════════════════════════════════════════
+/* PIANO ROLL RENDERING */
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderPianoRoll() {
+  renderPianoKeys();
+  renderPianoGrid();
+}
+
+function renderPianoKeys() {
+  const keysContainer = document.getElementById('piano-keys');
+  keysContainer.innerHTML = '';
+
+  NOTE_NAMES.reverse().forEach((note) => {
+    const key = document.createElement('div');
+    key.className = 'piano-key';
+    
+    // Check if it's a black key
+    if (note.includes('#')) {
+      key.classList.add('black');
+    }
+    
+    key.textContent = note;
+    keysContainer.appendChild(key);
+  });
+
+  NOTE_NAMES.reverse(); // reverse back
+}
+
+function renderPianoGrid() {
+  const grid = document.getElementById('piano-roll-grid');
   grid.innerHTML = '';
 
-  // Header row (empty top-left + step numbers)
-  const empty = document.createElement('div');
-  grid.appendChild(empty);
-  for (let i = 0; i < state.steps; i++) {
-    const header = document.createElement('div');
-    header.textContent = i + 1;
-    header.style.textAlign = 'center';
-    header.style.fontSize = '11px';
-    header.style.color = '#666';
-    header.style.fontWeight = 'bold';
-    grid.appendChild(header);
-  }
+  const notesReverse = [...NOTE_NAMES].reverse();
+  const cols = 128; // 8 bars × 16 steps
 
-  // Rows for each track
-  state.tracks.forEach((track, trackIndex) => {
-    const label = document.createElement('div');
-    label.className = 'track-label';
-    label.textContent = track.name;
-    grid.appendChild(label);
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${notesReverse.length}, 24px)`;
 
-    for (let step = 0; step < state.steps; step++) {
+  for (let note = 0; note < notesReverse.length; note++) {
+    for (let step = 0; step < cols; step++) {
       const cell = document.createElement('div');
-      cell.className = 'step';
-      if (track.pattern[step]) {
+      cell.className = 'piano-note';
+
+      const key = `${selectedTrack}-${step}-${note}`;
+      if (pianoNotes[key]) {
         cell.classList.add('active');
       }
+
       if (step === state.currentStep) {
         cell.classList.add('current');
       }
-      cell.onclick = () => toggleStep(trackIndex, step);
+
+      cell.onclick = () => togglePianoNote(selectedTrack, step, note, cell);
       grid.appendChild(cell);
     }
-  });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EVENT HANDLERS
+/* EVENT HANDLERS */
 // ═══════════════════════════════════════════════════════════════════════════
 
 function attachEventListeners() {
@@ -160,10 +204,13 @@ function attachEventListeners() {
     apiCall('/bpm', 'POST', { bpm: parseFloat(e.target.value) });
   };
 
-  document.getElementById('scale-select').onchange = (e) => {
-    state.steps = parseInt(e.target.value);
-    renderGrid();
-  };
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.dataset.tab;
+      switchTab(tabName);
+    });
+  });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
@@ -194,13 +241,43 @@ function attachEventListeners() {
   });
 }
 
+function switchTab(tabName) {
+  // Hide all tabs
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+  });
+
+  // Deactivate all buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Show selected tab
+  document.getElementById(tabName).classList.add('active');
+
+  // Activate button
+  document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+}
+
 async function toggleStep(trackIndex, step) {
   await apiCall(`/track/${trackIndex}/step/${step}`, 'POST');
-  renderGrid();
+  renderChannelRack();
+}
+
+function togglePianoNote(trackIndex, step, note, element) {
+  const key = `${trackIndex}-${step}-${note}`;
+  
+  if (pianoNotes[key]) {
+    delete pianoNotes[key];
+    element.classList.remove('active');
+  } else {
+    pianoNotes[key] = true;
+    element.classList.add('active');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// POLLING
+/* POLLING & UPDATES */
 // ═══════════════════════════════════════════════════════════════════════════
 
 function startStatusPolling() {
@@ -213,31 +290,38 @@ function startStatusPolling() {
 
 function updateStepDisplay() {
   const info = document.getElementById('step-info');
-  info.textContent = `Step: ${state.currentStep + 1}`;
+  const bar = Math.floor(state.currentStep / 16) + 1;
+  const beat = (state.currentStep % 16) + 1;
+  info.textContent = `Bar: ${bar} | Beat: ${beat}`;
 }
 
 function updateCurrentStep() {
-  const steps = document.querySelectorAll('.step');
-  steps.forEach((step) => step.classList.remove('current'));
+  // Update channel rack visual
+  document.querySelectorAll('.step-btn').forEach(btn => {
+    btn.classList.remove('current');
+  });
 
-  // Recalculate current positions
-  let stepIndex = 0;
-  state.tracks.forEach((track) => {
-    for (let i = 0; i < state.steps; i++) {
-      const cellIndex = stepIndex + i + 1; // +1 for track label
-      if (i === state.currentStep) {
-        const cell = document.querySelectorAll('.step')[stepIndex * state.steps + i];
-        if (cell) {
-          cell.classList.add('current');
-        }
-      }
+  // Update piano roll visual
+  document.querySelectorAll('.piano-note').forEach(note => {
+    note.classList.remove('current');
+  });
+
+  const currentStepDisplay = state.currentStep % 32;
+  document.querySelectorAll('.step-btn').forEach((btn, idx) => {
+    if (idx === Math.floor(currentStepDisplay / 4)) {
+      btn.classList.add('current');
     }
-    stepIndex += 1;
+  });
+
+  document.querySelectorAll('.piano-note').forEach((note, idx) => {
+    if (idx % 128 === state.currentStep % 128) {
+      note.classList.add('current');
+    }
   });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// START
+/* START */
 // ═══════════════════════════════════════════════════════════════════════════
 
 init();
