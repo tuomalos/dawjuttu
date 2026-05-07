@@ -1,17 +1,19 @@
 // DAW Frontend Controller
 const API_BASE = 'http://localhost:5000/api';
 
-// Note frequencies for piano roll
-const NOTE_NAMES = ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4',
-                    'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5', 'A#5', 'B5',
-                    'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6'];
+// Note frequencies for piano roll (32 keys)
+const NOTE_NAMES = [
+  'C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4',
+  'C5', 'C#5', 'D5', 'D#5', 'E5', 'F5', 'F#5', 'G5', 'G#5', 'A5', 'A#5', 'B5',
+  'C6', 'C#6', 'D6', 'D#6', 'E6', 'F6', 'F#6', 'G6'
+];
 
 let state = {
   tracks: [],
   playing: false,
   currentStep: 0,
   bpm: 120,
-  steps: 128, // 8 bars of 16 steps
+  steps: 128, // 8 bars × 16 steps
 };
 
 let pianoNotes = {};
@@ -62,7 +64,7 @@ async function apiCall(endpoint, method = 'POST', data = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-/* CHANNEL RACK RENDERING */
+// CHANNEL RACK RENDERING
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderChannelRack() {
@@ -78,16 +80,14 @@ function renderChannelRack() {
     leftControls.className = 'channel-controls-left';
 
     const indicator = document.createElement('div');
-    indicator.className = 'channel-indicator';
-    if (track.muted) {
-      indicator.classList.add('off');
-    }
+    indicator.className = `channel-indicator ${track.muted ? 'off' : ''}`;
+    indicator.title = 'Power';
     indicator.onclick = () => apiCall(`/track/${index}/mute`, 'POST');
     leftControls.appendChild(indicator);
 
     const muteBtn = document.createElement('button');
     muteBtn.className = 'channel-icon-btn';
-    muteBtn.textContent = '🔇';
+    muteBtn.textContent = 'M';
     muteBtn.title = 'Mute';
     muteBtn.onclick = () => apiCall(`/track/${index}/mute`, 'POST');
     leftControls.appendChild(muteBtn);
@@ -98,7 +98,7 @@ function renderChannelRack() {
     soloBtn.title = 'Solo';
     leftControls.appendChild(soloBtn);
 
-    // Track name
+    // Track name (clickable to select for piano roll)
     const name = document.createElement('div');
     name.className = 'channel-name';
     name.textContent = track.name;
@@ -111,17 +111,18 @@ function renderChannelRack() {
     const stepsDiv = document.createElement('div');
     stepsDiv.className = 'channel-steps';
 
-    for (let i = 0; i < 32; i += 4) {
+    for (let i = 0; i < 8; i++) {
       const stepBtn = document.createElement('button');
       stepBtn.className = 'step-btn';
-      if (track.pattern[i]) {
+      const stepIndex = i * 16;
+      if (track.pattern && track.pattern[stepIndex]) {
         stepBtn.classList.add('active');
       }
-      if (i === state.currentStep) {
+      if (stepIndex === state.currentStep) {
         stepBtn.classList.add('current');
       }
-      stepBtn.textContent = String.fromCharCode(9632); // filled square
-      stepBtn.onclick = () => toggleStep(index, i);
+      stepBtn.textContent = (i + 1);
+      stepBtn.onclick = () => toggleStep(index, stepIndex);
       stepsDiv.appendChild(stepBtn);
     }
 
@@ -133,7 +134,7 @@ function renderChannelRack() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-/* PIANO ROLL RENDERING */
+// PIANO ROLL RENDERING
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderPianoRoll() {
@@ -145,38 +146,39 @@ function renderPianoKeys() {
   const keysContainer = document.getElementById('piano-keys');
   keysContainer.innerHTML = '';
 
-  NOTE_NAMES.reverse().forEach((note) => {
+  const reverseNotes = [...NOTE_NAMES].reverse();
+
+  reverseNotes.forEach((note) => {
     const key = document.createElement('div');
     key.className = 'piano-key';
-    
+
     // Check if it's a black key
     if (note.includes('#')) {
       key.classList.add('black');
     }
-    
+
     key.textContent = note;
     keysContainer.appendChild(key);
   });
-
-  NOTE_NAMES.reverse(); // reverse back
 }
 
 function renderPianoGrid() {
   const grid = document.getElementById('piano-roll-grid');
   grid.innerHTML = '';
 
-  const notesReverse = [...NOTE_NAMES].reverse();
+  const reverseNotes = [...NOTE_NAMES].reverse();
   const cols = 128; // 8 bars × 16 steps
+  const rows = reverseNotes.length;
 
   grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-  grid.style.gridTemplateRows = `repeat(${notesReverse.length}, 24px)`;
+  grid.style.gridTemplateRows = `repeat(${rows}, 24px)`;
 
-  for (let note = 0; note < notesReverse.length; note++) {
+  for (let note = 0; note < rows; note++) {
     for (let step = 0; step < cols; step++) {
       const cell = document.createElement('div');
       cell.className = 'piano-note';
 
-      const key = `${selectedTrack}-${step}-${note}`;
+      const key = `track-${selectedTrack}-step-${step}-note-${note}`;
       if (pianoNotes[key]) {
         cell.classList.add('active');
       }
@@ -185,14 +187,17 @@ function renderPianoGrid() {
         cell.classList.add('current');
       }
 
-      cell.onclick = () => togglePianoNote(selectedTrack, step, note, cell);
+      cell.dataset.track = selectedTrack;
+      cell.dataset.step = step;
+      cell.dataset.note = note;
+      cell.onclick = () => togglePianoNote(cell, key);
       grid.appendChild(cell);
     }
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-/* EVENT HANDLERS */
+// EVENT HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
 
 function attachEventListeners() {
@@ -211,6 +216,11 @@ function attachEventListeners() {
       switchTab(tabName);
     });
   });
+
+  // Master volume
+  document.getElementById('master-volume').oninput = (e) => {
+    document.getElementById('volume-display').textContent = e.target.value + '%';
+  };
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
@@ -264,27 +274,25 @@ async function toggleStep(trackIndex, step) {
   renderChannelRack();
 }
 
-function togglePianoNote(trackIndex, step, note, element) {
-  const key = `${trackIndex}-${step}-${note}`;
-  
+function togglePianoNote(cell, key) {
   if (pianoNotes[key]) {
     delete pianoNotes[key];
-    element.classList.remove('active');
+    cell.classList.remove('active');
   } else {
     pianoNotes[key] = true;
-    element.classList.add('active');
+    cell.classList.add('active');
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-/* POLLING & UPDATES */
+// POLLING & UPDATES
 // ═══════════════════════════════════════════════════════════════════════════
 
 function startStatusPolling() {
   setInterval(async () => {
     await fetchState();
     updateStepDisplay();
-    updateCurrentStep();
+    updateCurrentStepDisplay();
   }, 100);
 }
 
@@ -295,33 +303,27 @@ function updateStepDisplay() {
   info.textContent = `Bar: ${bar} | Beat: ${beat}`;
 }
 
-function updateCurrentStep() {
-  // Update channel rack visual
-  document.querySelectorAll('.step-btn').forEach(btn => {
-    btn.classList.remove('current');
-  });
-
-  // Update piano roll visual
-  document.querySelectorAll('.piano-note').forEach(note => {
-    note.classList.remove('current');
-  });
-
-  const currentStepDisplay = state.currentStep % 32;
+function updateCurrentStepDisplay() {
+  // Update channel rack
   document.querySelectorAll('.step-btn').forEach((btn, idx) => {
-    if (idx === Math.floor(currentStepDisplay / 4)) {
+    btn.classList.remove('current');
+    const stepIndex = idx * 16;
+    if (state.currentStep >= stepIndex && state.currentStep < stepIndex + 16) {
       btn.classList.add('current');
     }
   });
 
-  document.querySelectorAll('.piano-note').forEach((note, idx) => {
-    if (idx % 128 === state.currentStep % 128) {
+  // Update piano roll
+  document.querySelectorAll('.piano-note').forEach((note) => {
+    note.classList.remove('current');
+    if (parseInt(note.dataset.step) === state.currentStep) {
       note.classList.add('current');
     }
   });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-/* START */
+// START
 // ═══════════════════════════════════════════════════════════════════════════
 
 init();
