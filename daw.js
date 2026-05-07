@@ -25,7 +25,23 @@ let selectedTrack = 0;
 // ════════════════════════════════════════════════════════════════[...]
 
 async function init() {
+  console.log("Initializing DAW...");
+
+  // Ensure backend is initialized
+  try {
+    await fetch(`${API_BASE}/init`, { method: 'POST' });
+  } catch (e) {
+    console.log("Backend may already be initialized");
+  }
+
   await fetchState();
+
+  if (state.tracks && state.tracks.length > 0) {
+    console.log(`Loaded ${state.tracks.length} tracks`);
+  } else {
+    console.warn("No tracks loaded - using fallback");
+  }
+
   renderChannelRack();
   renderPianoRoll();
   attachEventListeners();
@@ -275,7 +291,13 @@ function switchTab(tabName) {
   // Activate button
   const selectedBtn = document.querySelector(`[data-tab="${tabName}"]`);
   if (selectedBtn) selectedBtn.classList.add('active');
+  if (tabName === 'piano-roll-tab') {
+    renderPianoRoll();
+  } else if (tabName === 'channel-rack-tab') {
+    renderChannelRack();
+  }
 }
+
 
 async function toggleStep(trackIndex, step) {
   await apiCall(`/track/${trackIndex}/toggle-step/${step}`, 'POST');
